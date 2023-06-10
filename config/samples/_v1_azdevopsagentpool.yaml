@@ -1,0 +1,16 @@
+apiVersion: vortal.biz/v1
+kind: AzDevopsAgentPool
+metadata:
+  labels:
+    app.kubernetes.io/name: azdevopsagentpool
+    app.kubernetes.io/instance: azdevopsagentpool-sample
+    app.kubernetes.io/part-of: azdevops-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: azdevops-operator
+  name: azdevopsagentpool-sample
+spec:
+  autoscaling:
+    min: 2
+    max: 4
+  # TODO(user): Add fields here
+
