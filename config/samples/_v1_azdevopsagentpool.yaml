@@ -12,5 +12,95 @@ spec:
   autoscaling:
     min: 2
     max: 4
-  # TODO(user): Add fields here
-
+  template:
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: agent-init
+          image: busybox:latest
+          #args: 
+          #- "/bin/bash"
+          #- "-c"
+          #- "cp /azp/start.sh /mnt"
+          volumeMounts:
+          - mountPath: /mnt
+            name: workspace
+      containers:
+        - name: selfhosted-agents
+          image: busybox:latest
+          args:
+          - "/bin/sh"
+          - "-c"
+          - "tail -f /dev/null" 
+          resources:
+            requests:
+              cpu: "1000m"
+              ephemeral-storage: 10Gi
+              memory: "4Gi"
+            limits:
+              cpu: "4000m"
+              ephemeral-storage: 10Gi
+              memory: "12Gi"
+          env:
+            - name: NODE_OPTIONS
+              value: "--max_old_space_size=6144" 
+            - name: AZP_POOL
+              value: "vision-ci-dotnet6"
+            - name: AZP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: azdevops-token
+                  key: token
+            - name: AZP_URL
+              value: "https://vortal-projects.visualstudio.com"
+            - name: DOCKER_TLS_CERTDIR
+              value: /certs
+            - name: DOCKER_HOST
+              value: tcp://localhost:2376
+            - name: DOCKER_TLS_VERIFY
+              value: "1"
+            - name: DOCKER_CERT_PATH
+              value: /certs/client
+          volumeMounts:
+          - mountPath: /azp
+            name: workspace
+          - mountPath: /certs
+            name: docker-certs
+          - mountPath: /var/run
+            name: var-run
+        - name: docker
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: /certs
+          image: docker:23.0.1-dind
+          resources:
+            limits:
+              cpu: "1000m"
+              ephemeral-storage: 10Gi
+              memory: "8Gi"
+            requests:
+              cpu: "100m"
+              ephemeral-storage: 5Gi
+              memory: "100Mi"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /var/lib/docker
+              name: docker-storage
+            - mountPath: /certs
+              name: docker-certs
+            - mountPath: /azp
+              name: workspace
+            - mountPath: /var/run
+              name: var-run
+      volumes:
+        - emptyDir: {}
+          name: workspace
+        - emptyDir: {}
+          name: docker-storage
+        - emptyDir: {}
+          name: docker-certs
+        #Unfortunatelly azure-devops-pipeline agent has a hardcoded check on /var/run/docker.sock, so we need to have it on the host container :/
+        #See src/Agent.Worker/ContainerOperationProvider.cs:657 @tag v2.217.2
+        - emptyDir: {}
+          name: var-run 

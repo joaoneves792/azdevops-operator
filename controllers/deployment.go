@@ -4,6 +4,7 @@ import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -11,6 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"encoding/json"
 
 	vortalbizv1 "vortal.biz/joaoneves/azdevops-operator/api/v1"
 )
@@ -43,10 +46,13 @@ func (r *AzDevopsAgentPoolReconciler) ensureDeployment(request reconcile.Request
 	if err != nil && errors.IsNotFound(err) {
 
 		// Create the deployment
+
+		depJson, _ := json.Marshal(dep)
 		err = r.Create(context.TODO(), dep)
 
 		if err != nil {
 			// Deployment failed
+			log.Error(err, string(depJson))
 			return &reconcile.Result{}, err
 		} else {
 			// Deployment was successful
@@ -80,7 +86,7 @@ func (r *AzDevopsAgentPoolReconciler) backendDeployment(v *vortalbizv1.AzDevopsA
 	size := int32(v.Spec.Autoscaling.Min)
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "hello-pod",
+			Name:      "azdevops-pool",
 			Namespace: v.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -88,7 +94,12 @@ func (r *AzDevopsAgentPoolReconciler) backendDeployment(v *vortalbizv1.AzDevopsA
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			Template: v.Spec.Template,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: v.Spec.Template.Spec,
+			},
 		},
 	}
 
