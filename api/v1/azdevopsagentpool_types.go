@@ -30,6 +30,13 @@ type AzDevopsAgentPoolAutoscaling struct {
 	Min int32 `json:"min,omitempty"`
 }
 
+type AzDevopsProject struct {
+	Url          string `json:"url,omitempty"`
+	PoolName     string `json:"poolName,omitempty"`
+	ProjectName  string `json:"projectName,omitempty"`
+	PatSecretRef string `json:"PATSecretRef"`
+}
+
 // AzDevopsAgentPoolSpec defines the desired state of AzDevopsAgentPool
 type AzDevopsAgentPoolSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -37,6 +44,7 @@ type AzDevopsAgentPoolSpec struct {
 
 	// Foo is an example field of AzDevopsAgentPool. Edit azdevopsagentpool_types.go to remove/update
 	//Foo string `json:"foo,omitempty"`
+	Project     AzDevopsProject              `json:"project,omitempty"`
 	Autoscaling AzDevopsAgentPoolAutoscaling `json:"autoscaling,omitempty"`
 	Template    corev1.PodTemplateSpec       `json:"template,omitempty"`
 }

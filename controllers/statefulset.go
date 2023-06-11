@@ -13,53 +13,47 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"encoding/json"
-
 	vortalbizv1 "vortal.biz/joaoneves/azdevops-operator/api/v1"
 )
 
-func labels(v *vortalbizv1.AzDevopsAgentPool, tier string) map[string]string {
+func labels(v *vortalbizv1.AzDevopsAgentPool) map[string]string {
 	// Fetches and sets labels
 
 	return map[string]string{
-		"app":             "visitors",
-		"visitorssite_cr": v.Name,
-		"tier":            tier,
+		"app":       "azdevops-agent-pool",
+		"pool-name": v.Name,
 	}
 }
 
-// ensureDeployment ensures Deployment resource presence in given namespace.
-func (r *AzDevopsAgentPoolReconciler) ensureDeployment(request reconcile.Request,
+// ensureStatefulSet ensures StatefulSet resource presence in given namespace.
+func (r *AzDevopsAgentPoolReconciler) ensureStatefulSet(request reconcile.Request,
 	instance *vortalbizv1.AzDevopsAgentPool,
-	dep *appsv1.Deployment,
+	sts *appsv1.StatefulSet,
 	ctx context.Context,
 ) (*reconcile.Result, error) {
 
-	log := log.FromContext(ctx).WithValues("AzDevopsController", dep.Name)
+	log := log.FromContext(ctx).WithValues("AzDevopsController", sts.Name)
 
-	// See if deployment already exists and create if it doesn't
-	found := &appsv1.Deployment{}
+	// See if StatefulSet already exists and create if it doesn't
+	found := &appsv1.StatefulSet{}
 	err := r.Get(context.TODO(), types.NamespacedName{
-		Name:      dep.Name,
+		Name:      sts.Name,
 		Namespace: instance.Namespace,
 	}, found)
 	if err != nil && errors.IsNotFound(err) {
 
-		// Create the deployment
-
-		depJson, _ := json.Marshal(dep)
-		err = r.Create(context.TODO(), dep)
+		// Create the stsloyment
+		err = r.Create(context.TODO(), sts)
 
 		if err != nil {
-			// Deployment failed
-			log.Error(err, string(depJson))
+			// StatefulSet failed
 			return &reconcile.Result{}, err
 		} else {
-			// Deployment was successful
+			// StatefulSet was successful
 			return nil, nil
 		}
 	} else if err != nil {
-		// Error that isn't due to the deployment not existing
+		// Error that isn't due to the StatefulSet not existing
 		return &reconcile.Result{}, err
 	}
 
@@ -68,7 +62,7 @@ func (r *AzDevopsAgentPoolReconciler) ensureDeployment(request reconcile.Request
 		found.Spec.Replicas = &replicas
 		err = r.Update(context.TODO(), found)
 		if err != nil {
-			log.Error(err, "Failed to update Deployment", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
+			log.Error(err, "Failed to update StatefulSet", "StatefulSet.Namespace", found.Namespace, "StatefulSet.Name", found.Name)
 			return &ctrl.Result{}, err
 		}
 		// Spec updated return and requeue
@@ -79,17 +73,16 @@ func (r *AzDevopsAgentPoolReconciler) ensureDeployment(request reconcile.Request
 	return nil, nil
 }
 
-// backendDeployment is a code for Creating Deployment
-func (r *AzDevopsAgentPoolReconciler) backendDeployment(v *vortalbizv1.AzDevopsAgentPool) *appsv1.Deployment {
+func (r *AzDevopsAgentPoolReconciler) poolStatefulSet(v *vortalbizv1.AzDevopsAgentPool) *appsv1.StatefulSet {
 
-	labels := labels(v, "backend")
+	labels := labels(v)
 	size := int32(v.Spec.Autoscaling.Min)
-	dep := &appsv1.Deployment{
+	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "azdevops-pool",
+			Name:      v.Name,
 			Namespace: v.Namespace,
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
@@ -103,6 +96,6 @@ func (r *AzDevopsAgentPoolReconciler) backendDeployment(v *vortalbizv1.AzDevopsA
 		},
 	}
 
-	controllerutil.SetControllerReference(v, dep, r.Scheme)
-	return dep
+	controllerutil.SetControllerReference(v, sts, r.Scheme)
+	return sts
 }

@@ -35,6 +35,19 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              project:
+                properties:
+                  PATSecretRef:
+                    type: string
+                  poolName:
+                    type: string
+                  projectName:
+                    type: string
+                  url:
+                    type: string
+                required:
+                - PATSecretRef
+                type: object
               template:
                 properties:
                   metadata:

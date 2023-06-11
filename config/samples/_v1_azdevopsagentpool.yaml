@@ -9,6 +9,11 @@ metadata:
     app.kubernetes.io/created-by: azdevops-operator
   name: azdevopsagentpool-sample
 spec:
+  project:
+    url: "https://vortal-projects.visualstudio.com/"
+    projectName: "Nextvision"
+    poolName: "vision-ci-dotnet6"
+    PATSecretRef: "azdevops-token"  
   autoscaling:
     min: 2
     max: 4

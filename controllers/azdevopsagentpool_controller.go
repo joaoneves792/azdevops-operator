@@ -40,7 +40,8 @@ type AzDevopsAgentPoolReconciler struct {
 //+kubebuilder:rbac:groups=vortal.biz,resources=azdevopsagentpools,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=vortal.biz,resources=azdevopsagentpools/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=vortal.biz,resources=azdevopsagentpools/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -71,19 +72,23 @@ func (r *AzDevopsAgentPoolReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return reconcile.Result{}, err
 	}
 
-	// Check if this Deployment already exists
-	found := &appsv1.Deployment{}
+	// Check if this StatefulSet already exists
+	found := &appsv1.StatefulSet{}
 	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, found)
 	var result *reconcile.Result
-	result, err = r.ensureDeployment(req, instance, r.backendDeployment(instance), ctx)
+	sts := r.poolStatefulSet(instance)
+	result, err = r.ensureStatefulSet(req, instance, sts, ctx)
 	if result != nil {
-		log.Error(err, "Deployment Not ready")
+		log.Error(err, "StatefulSet pool Not ready")
 		return *result, err
 	}
 
-	// Deployment and Service already exists - don't requeue
-	log.Info("Skip reconcile: Deployment and service already exists",
-		"Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
+	log.Info("Running autoscaling logic")
+	r.autoscale(req, instance, sts, ctx)
+
+	// StatefulSet and Service already exists - don't requeue
+	log.Info("Skip reconcile: StatefulSet and service already exists",
+		"StatefulSet.Namespace", found.Namespace, "StatefulSet.Name", found.Name)
 
 	return ctrl.Result{}, nil
 }
