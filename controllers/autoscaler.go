@@ -15,8 +15,11 @@ package controllers
 //curl -X PATCH -u "joao.neves@vortal.biz:$AZDEVOPSTOKEN" -H "Content-Type: application/json" "https://dev.azure.com/vortal-projects/_apis/distributedtask/pools/90/agents/269?api-version=7.0" -d '{"id": 269, "enabled":true}'
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/go-logr/logr"
+	"io"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,9 +27,78 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strconv"
-	"text/template"
+	"strings"
 	vortalbizv1 "vortal.biz/joaoneves/azdevops-operator/api/v1"
 )
+
+func (r *AzDevopsAgentPoolReconciler) performDevopsRESTRequest(method string, url string, PAT string, body string, log *logr.Logger) ([]byte, error) {
+	client := http.Client{}
+
+	bodyReader := strings.NewReader(body)
+	req, err := http.NewRequest(method, url, bodyReader) //this body needs to be io.Reader not string
+	if err != nil {
+		return nil, err
+	}
+	req.SetBasicAuth("", PAT)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Error(err, "Failed to execute request", url)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		log.Info("Unexpected response code", strconv.Itoa(resp.StatusCode), http.StatusText(resp.StatusCode))
+		return nil, nil
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error(err, "Failed to read response body")
+		return nil, err
+	}
+
+	return []byte(bodyBytes), nil
+}
+
+type TaskAgentPoolResponse struct {
+	Value []struct {
+		Id   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"value"`
+}
+
+func (r *AzDevopsAgentPoolReconciler) getPoolID(instance *vortalbizv1.AzDevopsAgentPool, PAT string, log *logr.Logger) (int, error) {
+	baseUrl := instance.Spec.Project.Url
+	poolName := instance.Spec.Project.PoolName
+	apiVersion := "api-version=7.0"
+
+	//Get all pools
+	url := fmt.Sprintf("%s/_apis/distributedtask/pools?%s", baseUrl, apiVersion)
+
+	response, err := r.performDevopsRESTRequest("GET", url, PAT, "", log)
+	if err != nil {
+		log.Error(err, "Failed to execute request")
+		return 0, err
+	}
+
+	var robj TaskAgentPoolResponse
+
+	err = json.Unmarshal(response, &robj)
+	if err != nil {
+		log.Error(err, "Failed to unmarshal Pool json")
+		return 0, err
+	}
+
+	for _, pool := range robj.Value {
+		if pool.Name == poolName {
+			log.Info("PoolID", pool.Name, pool.Id)
+			return pool.Id, nil
+		}
+	}
+
+	return 0, nil
+}
 
 func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	instance *vortalbizv1.AzDevopsAgentPool,
@@ -36,11 +108,7 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	log := log.FromContext(ctx).WithValues("AzDevopsControllerAutoScaler", sts.Name)
 
 	currentReplicas := *sts.Spec.Replicas
-	baseUrl := instance.Spec.Project.Url
 	//projectName := instance.Spec.Project.ProjectName
-	//poolName := instance.Spec.Project.PoolName
-	//PATSecretRef := instance.Spec.Project.PatSecretRef
-	apiVersion := "api-version=7.0"
 
 	//Retrieve the PAT from the secret
 	secret := new(corev1.Secret)
@@ -51,25 +119,15 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 		return currentReplicas, err
 	}
 	PAT := string(secret.Data["token"])
-	log.Info(PAT)
 
-	var buf bytes.Buffer
-	url := "{{ .baseUrl }}/_apis/distributedtask/pools?{{ .apiVersion }}"
-	templ := template.Must(template.New("getPools").Parse(url))
-	templ.Execute(&buf, map[string]interface{}{
-		"baseUrl":    baseUrl,
-		"apiVersion": apiVersion,
-	})
-	resp, err := http.Get(string(buf.Bytes()))
+	poolID, err := r.getPoolID(instance, PAT, &log)
 	if err != nil {
-		log.Error(err, "Failed to execute request", string(buf.Bytes()))
+		log.Error(err, "Failed to resolve pool name to a pool ID")
 		return currentReplicas, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		log.Info("Unexpected response code", strconv.Itoa(resp.StatusCode), http.StatusText(resp.StatusCode))
-		return currentReplicas, nil
-	}
+
+	//log.Info("Got ", "pools", strconv.Itoa(int(obj["count"].(float64))))
+	log.Info("Success ", "PoolID", strconv.Itoa(poolID))
 
 	return currentReplicas, nil
 }

@@ -10,7 +10,7 @@ metadata:
   name: azdevopsagentpool-sample
 spec:
   project:
-    url: "https://vortal-projects.visualstudio.com/"
+    url: "https://dev.azure.com/vortal-projects/"
     projectName: "Nextvision"
     poolName: "vision-ci-dotnet6"
     PATSecretRef: "azdevops-token"  
