@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +36,8 @@ import (
 type AzDevopsAgentPoolReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	PAT    string
+	log    logr.Logger
 }
 
 //+kubebuilder:rbac:groups=vortal.biz,resources=azdevopsagentpools,verbs=get;list;watch;create;update;patch;delete
@@ -55,6 +58,7 @@ type AzDevopsAgentPoolReconciler struct {
 func (r *AzDevopsAgentPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	//_ = log.FromContext(ctx)
 	log := log.FromContext(ctx).WithValues("AzDevopsController", req.NamespacedName)
+	r.log = log
 
 	// TODO(user): your logic here
 
