@@ -24,16 +24,23 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// AzDevopsAgentPoolAutoscalingSchedule defines a schedule to scale up to max replicas and to scale down to min
+type AzDevopsAgentPoolAutoscalingSchedule struct {
+	ScaleUp   string `json:"scaleup,omitempty"`   //Should be in format hh:mm
+	ScaleDown string `json:"scaledown,omitempty"` //Should be in format hh:mm
+	TZ        string `json:"tz,omitempty"`        //IANA database timezone (ex. "Europe/Lisbon")
+}
+
 // AzDevopsAgentPoolAutoscaling defines the limits and thresholds for autoscaling the pool
 type AzDevopsAgentPoolAutoscaling struct {
-	Max int32 `json:"max,omitempty"`
-	Min int32 `json:"min,omitempty"`
+	Max      int32                                `json:"max,omitempty"`
+	Min      int32                                `json:"min,omitempty"`
+	Schedule AzDevopsAgentPoolAutoscalingSchedule `json:"schedule,omitempty"`
 }
 
 type AzDevopsProject struct {
 	Url          string `json:"url,omitempty"`
 	PoolName     string `json:"poolName,omitempty"`
-	ProjectName  string `json:"projectName,omitempty"`
 	PatSecretRef string `json:"PATSecretRef"`
 }
 

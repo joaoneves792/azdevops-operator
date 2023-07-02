@@ -30,6 +30,7 @@ func (r *AzDevopsAgentPoolReconciler) ensureStatefulSet(request reconcile.Reques
 	instance *vortalbizv1.AzDevopsAgentPool,
 	sts *appsv1.StatefulSet,
 	ctx context.Context,
+	replicas int32,
 ) (*reconcile.Result, error) {
 
 	log := log.FromContext(ctx).WithValues("AzDevopsController", sts.Name)
@@ -57,7 +58,6 @@ func (r *AzDevopsAgentPoolReconciler) ensureStatefulSet(request reconcile.Reques
 		return &reconcile.Result{}, err
 	}
 
-	replicas := instance.Spec.Autoscaling.Min
 	if *found.Spec.Replicas != replicas {
 		found.Spec.Replicas = &replicas
 		err = r.Update(context.TODO(), found)
@@ -67,6 +67,7 @@ func (r *AzDevopsAgentPoolReconciler) ensureStatefulSet(request reconcile.Reques
 		}
 		// Spec updated return and requeue
 		// Requeue for any reason other than an error
+		log.Info("Updated statefulset, requeueing")
 		return &ctrl.Result{Requeue: true}, nil
 	}
 

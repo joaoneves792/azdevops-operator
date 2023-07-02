@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"strconv"
 
 	vortalbizv1 "vortal.biz/joaoneves/azdevops-operator/api/v1"
 )
@@ -60,8 +60,6 @@ func (r *AzDevopsAgentPoolReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	log := log.FromContext(ctx).WithValues("AzDevopsController", req.NamespacedName)
 	r.log = log
 
-	// TODO(user): your logic here
-
 	// Fetch the AZDevopsPool instance
 	instance := &vortalbizv1.AzDevopsAgentPool{}
 	err := r.Get(context.TODO(), req.NamespacedName, instance)
@@ -79,19 +77,28 @@ func (r *AzDevopsAgentPoolReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Check if this StatefulSet already exists
 	found := &appsv1.StatefulSet{}
 	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, found)
+	desiredReplicas := int32(0)
+	if err == nil {
+		log.Info("Running autoscaling logic")
+		desiredReplicas, err = r.autoscale(req, instance, found, ctx)
+		if err != nil {
+			log.Error(err, "Failed to calculate desired number of replicas")
+			desiredReplicas = 0
+		}
+		log.Info("Autoscaler has finished", "desiredReplicas", strconv.Itoa(int(desiredReplicas)))
+
+	}
+
 	var result *reconcile.Result
 	sts := r.poolStatefulSet(instance)
-	result, err = r.ensureStatefulSet(req, instance, sts, ctx)
+	result, err = r.ensureStatefulSet(req, instance, sts, ctx, desiredReplicas)
 	if result != nil {
 		log.Error(err, "StatefulSet pool Not ready")
 		return *result, err
 	}
 
-	log.Info("Running autoscaling logic")
-	r.autoscale(req, instance, sts, ctx)
-
 	// StatefulSet and Service already exists - don't requeue
-	log.Info("Skip reconcile: StatefulSet and service already exists",
+	log.Info("Reconcile OK: StatefulSet and service already exists",
 		"StatefulSet.Namespace", found.Namespace, "StatefulSet.Name", found.Name)
 
 	return ctrl.Result{}, nil

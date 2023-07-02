@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strconv"
 	"strings"
+	"time"
 	vortalbizv1 "vortal.biz/joaoneves/azdevops-operator/api/v1"
 )
 
@@ -152,6 +153,88 @@ func (r *AzDevopsAgentPoolReconciler) disableAgent(instance *vortalbizv1.AzDevop
 
 }
 
+func (r *AzDevopsAgentPoolReconciler) enableAgent(instance *vortalbizv1.AzDevopsAgentPool, poolId int, agentId int) error {
+	log := r.log
+
+	baseUrl := instance.Spec.Project.Url
+	apiVersion := "api-version=7.0"
+
+	url := fmt.Sprintf("%s/_apis/distributedtask/pools/%s/agents/%s?%s", baseUrl, strconv.Itoa(poolId), strconv.Itoa(agentId), apiVersion)
+	body := fmt.Sprintf("{\"id\": %s, \"enabled\":true}", strconv.Itoa(agentId))
+	_, err := r.performDevopsRESTRequest("PATCH", url, body)
+	if err != nil {
+		log.Error(err, "Failed to execute request")
+		return err
+	}
+	return nil
+
+}
+
+func (r *AzDevopsAgentPoolReconciler) isAgentIdle(instance *vortalbizv1.AzDevopsAgentPool, poolId int, agentId int) (bool, error) {
+	log := r.log
+
+	baseUrl := instance.Spec.Project.Url
+	apiVersion := "api-version=7.0"
+	url := fmt.Sprintf("%s/_apis/distributedtask/pools/%s/agents/%s?includeAssignedRequest=true&%s", baseUrl, strconv.Itoa(poolId), strconv.Itoa(agentId), apiVersion)
+
+	response, err := r.performDevopsRESTRequest("GET", url, "")
+	if err != nil {
+		log.Error(err, "Failed to execute request")
+		return false, err
+	}
+
+	var obj map[string]json.RawMessage
+	err = json.Unmarshal(response, &obj)
+	if err != nil {
+		log.Error(err, "Failed to unmarshal Agents json")
+		return false, err
+	}
+	_, exists := obj["assignedRequest"]
+	if exists {
+		return false, nil //busy
+	} else {
+		return true, nil //idle
+	}
+
+}
+
+func (r *AzDevopsAgentPoolReconciler) calculateScheduleReplicas(instance *vortalbizv1.AzDevopsAgentPool) (int32, error) {
+	log := r.log
+
+	tz := instance.Spec.Autoscaling.Schedule.TZ
+	layout := "15:04"
+	scaleUp := instance.Spec.Autoscaling.Schedule.ScaleUp
+	scaleDown := instance.Spec.Autoscaling.Schedule.ScaleDown
+
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Error(err, "Failed to load timeZone")
+		return 0, err
+	}
+
+	n := time.Now().In(loc)
+
+	t, err := time.Parse(layout, scaleUp)
+	if err != nil {
+		log.Error(err, "Failed to parse scaleUp time")
+		return 0, err
+	}
+	scaleUpTime := time.Date(n.Year(), n.Month(), n.Day(), t.Hour(), t.Minute(), 0, n.Nanosecond(), n.Location())
+
+	t, _ = time.Parse(layout, scaleDown)
+	if err != nil {
+		log.Error(err, "Failed to parse scaleDown time")
+		return 0, err
+	}
+	scaleDownTime := time.Date(n.Year(), n.Month(), n.Day(), t.Hour(), t.Minute(), 0, n.Nanosecond(), n.Location())
+
+	if n.After(scaleUpTime) && n.Before(scaleDownTime) {
+		return instance.Spec.Autoscaling.Max, nil
+	} else {
+		return instance.Spec.Autoscaling.Min, nil
+	}
+}
+
 func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	instance *vortalbizv1.AzDevopsAgentPool,
 	sts *appsv1.StatefulSet,
@@ -160,7 +243,11 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	log := r.log
 
 	currentReplicas := *sts.Spec.Replicas
-	//projectName := instance.Spec.Project.ProjectName
+	desiredReplicas, err := r.calculateScheduleReplicas(instance)
+	if err != nil {
+		log.Error(err, "Schedule error, defaulting to current replicas")
+		desiredReplicas = currentReplicas
+	}
 
 	//Retrieve the PAT from the secret
 	secret := new(corev1.Secret)
@@ -173,6 +260,7 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	PAT := string(secret.Data["token"])
 	r.PAT = PAT
 
+	//Retrieve Pool ID from Pool name
 	poolID, err := r.getPoolID(instance)
 	if err != nil {
 		log.Error(err, "Failed to resolve pool name to a pool ID")
@@ -183,6 +271,7 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 		return currentReplicas, nil
 	}
 
+	//Fetch agents
 	agentStatus, err := r.getAgentsStatus(instance, poolID)
 	if err != nil {
 		log.Error(err, "Failed to fetch agents status")
@@ -191,6 +280,8 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 
 	for _, agent := range agentStatus.Value {
 		log.Info("Status", agent.Name, agent.Enabled)
+
+		//Retrieve agent number from name
 		splitName := strings.Split(agent.Name, instance.Name)
 		if splitName[0] == agent.Name {
 			continue //Not an agent controlled by us
@@ -200,13 +291,41 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 			log.Error(err, "Failed to retrieve agent number from agent name")
 			return currentReplicas, err
 		}
-		if int32(i) > (currentReplicas - 1) {
+
+		//Ensure only the desired agents are enabled
+		if int32(i) > (desiredReplicas - 1) {
 			if agent.Enabled {
 				log.Info("Disable agent", agent.Name, agent.Enabled)
-				r.disableAgent(instance, poolID, agent.Id)
+				err = r.disableAgent(instance, poolID, agent.Id)
+				if err != nil {
+					log.Error(err, "Failed to disable agent")
+					continue
+				}
+			}
+		} else if int32(i) <= (desiredReplicas - 1) {
+			if !agent.Enabled {
+				log.Info("Enable agent", agent.Name, agent.Enabled)
+				err = r.enableAgent(instance, poolID, agent.Id)
+				if err != nil {
+					log.Error(err, "Failed to enable agent")
+					continue
+				}
+				agent.Enabled = true
+			}
+		}
+
+		//Try to shut down idle disabled agents, but only the highest numbered one
+		if int32(i) == (currentReplicas-1) && !agent.Enabled {
+			idle, err := r.isAgentIdle(instance, poolID, agent.Id)
+			if err != nil {
+				log.Error(err, "Failed to check if agent was idle", agent.Name)
+			}
+			if idle {
+				log.Info("Shutting down idle disabled agent", agent.Name, agent.Enabled)
+				return currentReplicas - 1, nil
 			}
 		}
 	}
 
-	return currentReplicas, nil
+	return desiredReplicas, nil
 }

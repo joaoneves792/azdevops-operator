@@ -34,14 +34,21 @@ spec:
                   min:
                     format: int32
                     type: integer
+                  schedule:
+                    properties:
+                      scaledown:
+                        type: string
+                      scaleup:
+                        type: string
+                      tz:
+                        type: string
+                    type: object
                 type: object
               project:
                 properties:
                   PATSecretRef:
                     type: string
                   poolName:
-                    type: string
-                  projectName:
                     type: string
                   url:
                     type: string
