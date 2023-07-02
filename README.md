@@ -1,8 +1,14 @@
 # azdevops-operator
-// TODO(user): Add simple overview of use/purpose
+Kubernetes operator to manage Azure DevOps self-hosted agents.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+The operator manages the lifecycle of Azure DevOps self-hosted agents as a statefulset, ensuring they are safely added and removed from the pool.
+It does this by disabling the agent to remove, and then waiting for it to be idle (not running any jobs) before terminating the respective pod.
+
+The end goal is to support full autoscaling by checking the job queue.
+As of release 0.1.0 scaling can be done based on a schedule only.
+
+(check config/samples/_v1_azdevopsagentpool.yaml for an example)
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.

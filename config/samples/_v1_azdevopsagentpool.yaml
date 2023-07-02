@@ -7,11 +7,11 @@ metadata:
     app.kubernetes.io/part-of: azdevops-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: azdevops-operator
-  name: vision-ci-dotnet6
+  name: mypool
 spec:
   project:
-    url: "https://dev.azure.com/vortal-projects/"
-    poolName: "vision-ci-dotnet6"
+    url: "https://dev.azure.com/ORGANIZATION/"
+    poolName: "myPool"
     PATSecretRef: "azdevops-token"  
   autoscaling:
     min: 2
@@ -25,17 +25,17 @@ spec:
       automountServiceAccountToken: false
       initContainers:
         - name: agent-init
-          image: busybox:latest
-          #args: 
-          #- "/bin/bash"
-          #- "-c"
-          #- "cp /azp/start.sh /mnt"
+          image: busybox:latest #replace with an image containg the agent
+          args: 
+          - "/bin/bash"
+          - "-c"
+          - "cp /azp/start.sh /mnt"
           volumeMounts:
           - mountPath: /mnt
             name: workspace
       containers:
         - name: selfhosted-agents
-          image: busybox:latest
+          image: busybox:latest #replace with an image containg the agent
           args:
           - "/bin/sh"
           - "-c"
@@ -50,17 +50,15 @@ spec:
               ephemeral-storage: 10Gi
               memory: "12Gi"
           env:
-            - name: NODE_OPTIONS
-              value: "--max_old_space_size=6144" 
             - name: AZP_POOL
-              value: "vision-ci-dotnet6"
+              value: "" #Replace with the name of your pool
             - name: AZP_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: azdevops-token
                   key: token
             - name: AZP_URL
-              value: "https://vortal-projects.visualstudio.com"
+              value: "" #Replace with the url of your organization
             - name: DOCKER_TLS_CERTDIR
               value: /certs
             - name: DOCKER_HOST
