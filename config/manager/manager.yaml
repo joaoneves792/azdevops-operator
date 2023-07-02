@@ -31,8 +31,7 @@ spec:
         - /manager
         args:
         - --leader-elect
-        #image: harbor.warpenguin.dev/library/azdevops-operator:1
-        image: azdevops-operator:1
+        image: ghcr.io/joaoneves792/azdevops-operator:0.1.0
         imagePullPolicy: Never
         name: manager
         securityContext:
