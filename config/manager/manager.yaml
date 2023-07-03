@@ -24,15 +24,12 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-      imagePullSecrets:
-      - name: harbor-pull-secret
       containers:
       - command:
         - /manager
         args:
         - --leader-elect
         image: ghcr.io/joaoneves792/azdevops-operator:0.1.0
-        imagePullPolicy: Never
         name: manager
         securityContext:
           allowPrivilegeEscalation: false
@@ -58,24 +55,3 @@ spec:
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
 ---
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: harbor-creds
-spec:
-  refreshInterval: 1h0m0s
-  secretStoreRef:
-    name: vault-backend
-    kind: ClusterSecretStore
-  target:
-    template:
-      type: kubernetes.io/dockerconfigjson
-      data:
-        .dockerconfigjson: "{{ .secret | toString }}"
-    name: harbor-pull-secret
-    creationPolicy: Owner
-  data:
-  - secretKey: secret
-    remoteRef:
-      key: k8s/harbor/dockerconfig
-      property: config
