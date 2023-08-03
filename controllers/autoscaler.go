@@ -228,6 +228,11 @@ func (r *AzDevopsAgentPoolReconciler) calculateScheduleReplicas(instance *vortal
 	}
 	scaleDownTime := time.Date(n.Year(), n.Month(), n.Day(), t.Hour(), t.Minute(), 0, n.Nanosecond(), n.Location())
 
+	skipWeekends := instance.Spec.Autoscaling.Schedule.SkipWeekends
+	if skipWeekends && (n.Weekday() == time.Saturday || n.Weekday() == time.Sunday) {
+		return instance.Spec.Autoscaling.Min, nil
+	}
+
 	if n.After(scaleUpTime) && n.Before(scaleDownTime) {
 		return instance.Spec.Autoscaling.Max, nil
 	} else {

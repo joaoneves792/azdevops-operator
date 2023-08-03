@@ -20,6 +20,7 @@ spec:
       scaleup: "09:00"
       scaledown: "19:00"
       tz: "Europe/Lisbon"
+      skipweekends: true
   template:
     spec:
       automountServiceAccountToken: false

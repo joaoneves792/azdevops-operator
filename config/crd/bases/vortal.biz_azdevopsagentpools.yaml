@@ -40,6 +40,8 @@ spec:
                         type: string
                       scaleup:
                         type: string
+                      skipweekends:
+                        type: boolean
                       tz:
                         type: string
                     type: object

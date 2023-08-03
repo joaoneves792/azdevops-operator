@@ -26,9 +26,10 @@ import (
 
 // AzDevopsAgentPoolAutoscalingSchedule defines a schedule to scale up to max replicas and to scale down to min
 type AzDevopsAgentPoolAutoscalingSchedule struct {
-	ScaleUp   string `json:"scaleup,omitempty"`   //Should be in format hh:mm
-	ScaleDown string `json:"scaledown,omitempty"` //Should be in format hh:mm
-	TZ        string `json:"tz,omitempty"`        //IANA database timezone (ex. "Europe/Lisbon")
+	ScaleUp      string `json:"scaleup,omitempty"`      //Should be in format hh:mm
+	ScaleDown    string `json:"scaledown,omitempty"`    //Should be in format hh:mm
+	TZ           string `json:"tz,omitempty"`           //IANA database timezone (ex. "Europe/Lisbon")
+	SkipWeekends bool   `json:"skipweekends,omitempty"` // Dont scale (up or down) during weekends
 }
 
 // AzDevopsAgentPoolAutoscaling defines the limits and thresholds for autoscaling the pool
