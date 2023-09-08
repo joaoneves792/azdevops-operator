@@ -78,6 +78,12 @@ type TaskAgentsResponse struct {
 	} `json:"value"`
 }
 
+type JobsResponseForResult struct {
+	Value []struct {
+		Result string `json:"result"`
+	} `json:"value"`
+}
+
 func (r *AzDevopsAgentPoolReconciler) getPoolID(instance *vortalbizv1.AzDevopsAgentPool) (int, error) {
 	log := r.log
 	baseUrl := instance.Spec.Project.Url
@@ -109,6 +115,36 @@ func (r *AzDevopsAgentPoolReconciler) getPoolID(instance *vortalbizv1.AzDevopsAg
 	}
 
 	return 0, nil
+}
+
+func (r *AzDevopsAgentPoolReconciler) getQueuedJobs(instance *vortalbizv1.AzDevopsAgentPool, poolId int) (error, int32) {
+	log := r.log
+
+	baseUrl := instance.Spec.Project.Url
+	apiVersion := "api-version=6.0"
+
+	url := fmt.Sprintf("%s/_apis/distributedtask/pools/%s/jobrequests?%s", baseUrl, strconv.Itoa(poolId), apiVersion)
+	response, err := r.performDevopsRESTRequest("GET", url, "")
+	if err != nil {
+		log.Error(err, "Failed to execute request")
+		return err, -1
+	}
+
+	var obj JobsResponseForResult
+	err = json.Unmarshal([]byte(response), &obj)
+	if err != nil {
+		return err, -1
+	}
+
+	var activeJobs int32 = 0
+	for _, pool := range obj.Value {
+		if "" == pool.Result { //If we don't have a result then job is either queued or running
+			activeJobs += 1
+		}
+	}
+
+	return nil, activeJobs
+
 }
 
 func (r *AzDevopsAgentPoolReconciler) getAgentsStatus(instance *vortalbizv1.AzDevopsAgentPool, poolId int) (TaskAgentsResponse, error) {
@@ -248,11 +284,7 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	log := r.log
 
 	currentReplicas := *sts.Spec.Replicas
-	desiredReplicas, err := r.calculateScheduleReplicas(instance)
-	if err != nil {
-		log.Error(err, "Schedule error, defaulting to current replicas")
-		desiredReplicas = currentReplicas
-	}
+	desiredReplicas := currentReplicas
 
 	//Retrieve the PAT from the secret
 	secret := new(corev1.Secret)
@@ -274,6 +306,27 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	if poolID == 0 {
 		log.Info("Failed to find a matching pool, check the pool name")
 		return currentReplicas, nil
+	}
+
+	//Check how many jobs are active (running+queued)
+	err, activeJobs := r.getQueuedJobs(instance, poolID)
+	log.Info("ActiveJobs", "count", strconv.Itoa(int(activeJobs)))
+
+	//Calculate how many replicas we can have based on schedule
+	maxReplicas, err := r.calculateScheduleReplicas(instance)
+	if err != nil {
+		log.Error(err, "Schedule error, defaulting to current replicas")
+	}
+
+	//Calculate desired replicas based on schedule and queue
+	if activeJobs < maxReplicas {
+		desiredReplicas = activeJobs + 1
+	} else {
+		desiredReplicas = maxReplicas
+	}
+
+	if desiredReplicas < 1 {
+		desiredReplicas = 1
 	}
 
 	//Fetch agents
@@ -332,5 +385,10 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 		}
 	}
 
-	return desiredReplicas, nil
+	if desiredReplicas > currentReplicas {
+		return desiredReplicas, nil //When increasing replicas we can increase right away
+	} else {
+		return currentReplicas, nil //otherwise keep the replicas, downscaling happens only after making sure it doesn't cancel a job
+	}
+
 }
