@@ -77,7 +77,7 @@ func (r *AzDevopsAgentPoolReconciler) ensureStatefulSet(request reconcile.Reques
 func (r *AzDevopsAgentPoolReconciler) poolStatefulSet(v *vortalbizv1.AzDevopsAgentPool) *appsv1.StatefulSet {
 
 	labels := labels(v)
-	size := int32(v.Spec.Autoscaling.Min)
+	size := int32(v.Spec.Autoscaling.ScaleDownSpare)
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      v.Name,

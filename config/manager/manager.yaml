@@ -29,7 +29,7 @@ spec:
         - /manager
         args:
         - --leader-elect
-        image: vortal.azurecr.io/azdevops-operator:0.1.7
+        image: vortal.azurecr.io/azdevops-operator:0.1.9
         name: manager
         securityContext:
           allowPrivilegeEscalation: false

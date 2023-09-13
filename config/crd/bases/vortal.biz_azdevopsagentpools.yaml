@@ -28,10 +28,16 @@ spec:
             properties:
               autoscaling:
                 properties:
-                  max:
+                  scaleDownMax:
                     format: int32
                     type: integer
-                  min:
+                  scaleDownSpare:
+                    format: int32
+                    type: integer
+                  scaleUpMax:
+                    format: int32
+                    type: integer
+                  scaleUpSpare:
                     format: int32
                     type: integer
                   schedule:

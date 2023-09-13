@@ -14,8 +14,10 @@ spec:
     poolName: "myPool"
     PATSecretRef: "azdevops-token"  
   autoscaling:
-    min: 2
-    max: 4
+    scaleUpMax: 4
+    scaleDownMax: 1
+    scaleUpSpare: 1
+    scaleDownSpare: 0
     schedule:
       scaleup: "09:00"
       scaledown: "19:00"

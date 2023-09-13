@@ -234,7 +234,7 @@ func (r *AzDevopsAgentPoolReconciler) isAgentIdle(instance *vortalbizv1.AzDevops
 
 }
 
-func (r *AzDevopsAgentPoolReconciler) calculateScheduleReplicas(instance *vortalbizv1.AzDevopsAgentPool) (int32, error) {
+func (r *AzDevopsAgentPoolReconciler) calculateScheduleReplicas(instance *vortalbizv1.AzDevopsAgentPool) (int32, int32, error) {
 	log := r.log
 
 	tz := instance.Spec.Autoscaling.Schedule.TZ
@@ -245,7 +245,7 @@ func (r *AzDevopsAgentPoolReconciler) calculateScheduleReplicas(instance *vortal
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		log.Error(err, "Failed to load timeZone")
-		return 0, err
+		return 0, 0, err
 	}
 
 	n := time.Now().In(loc)
@@ -253,26 +253,26 @@ func (r *AzDevopsAgentPoolReconciler) calculateScheduleReplicas(instance *vortal
 	t, err := time.Parse(layout, scaleUp)
 	if err != nil {
 		log.Error(err, "Failed to parse scaleUp time")
-		return 0, err
+		return 0, 0, err
 	}
 	scaleUpTime := time.Date(n.Year(), n.Month(), n.Day(), t.Hour(), t.Minute(), 0, n.Nanosecond(), n.Location())
 
 	t, _ = time.Parse(layout, scaleDown)
 	if err != nil {
 		log.Error(err, "Failed to parse scaleDown time")
-		return 0, err
+		return 0, 0, err
 	}
 	scaleDownTime := time.Date(n.Year(), n.Month(), n.Day(), t.Hour(), t.Minute(), 0, n.Nanosecond(), n.Location())
 
 	skipWeekends := instance.Spec.Autoscaling.Schedule.SkipWeekends
 	if skipWeekends && (n.Weekday() == time.Saturday || n.Weekday() == time.Sunday) {
-		return instance.Spec.Autoscaling.Min, nil
+		return instance.Spec.Autoscaling.ScaleDownMax, instance.Spec.Autoscaling.ScaleDownSpare, nil
 	}
 
 	if n.After(scaleUpTime) && n.Before(scaleDownTime) {
-		return instance.Spec.Autoscaling.Max, nil
+		return instance.Spec.Autoscaling.ScaleUpMax, instance.Spec.Autoscaling.ScaleUpSpare, nil
 	} else {
-		return instance.Spec.Autoscaling.Min, nil
+		return instance.Spec.Autoscaling.ScaleDownMax, instance.Spec.Autoscaling.ScaleDownSpare, nil
 	}
 }
 
@@ -313,20 +313,20 @@ func (r *AzDevopsAgentPoolReconciler) autoscale(request reconcile.Request,
 	log.Info("ActiveJobs", "count", strconv.Itoa(int(activeJobs)))
 
 	//Calculate how many replicas we can have based on schedule
-	maxReplicas, err := r.calculateScheduleReplicas(instance)
+	maxReplicas, spareReplicas, err := r.calculateScheduleReplicas(instance)
 	if err != nil {
 		log.Error(err, "Schedule error, defaulting to current replicas")
 	}
 
 	//Calculate desired replicas based on schedule and queue
 	if activeJobs < maxReplicas {
-		desiredReplicas = activeJobs + 1
+		desiredReplicas = activeJobs + spareReplicas
 	} else {
 		desiredReplicas = maxReplicas
 	}
 
-	if desiredReplicas < 1 {
-		desiredReplicas = 1
+	if desiredReplicas < spareReplicas {
+		desiredReplicas = spareReplicas
 	}
 
 	//Fetch agents

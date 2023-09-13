@@ -34,9 +34,11 @@ type AzDevopsAgentPoolAutoscalingSchedule struct {
 
 // AzDevopsAgentPoolAutoscaling defines the limits and thresholds for autoscaling the pool
 type AzDevopsAgentPoolAutoscaling struct {
-	Max      int32                                `json:"max,omitempty"`
-	Min      int32                                `json:"min,omitempty"`
-	Schedule AzDevopsAgentPoolAutoscalingSchedule `json:"schedule,omitempty"`
+	ScaleUpMax     int32                                `json:"scaleUpMax,omitempty"`
+	ScaleDownMax   int32                                `json:"scaleDownMax,omitempty"`
+	ScaleUpSpare   int32                                `json:"scaleUpSpare,omitempty"`
+	ScaleDownSpare int32                                `json:"scaleDownSpare,omitempty"`
+	Schedule       AzDevopsAgentPoolAutoscalingSchedule `json:"schedule,omitempty"`
 }
 
 type AzDevopsProject struct {
